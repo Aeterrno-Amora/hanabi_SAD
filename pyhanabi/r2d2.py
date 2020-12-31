@@ -7,8 +7,77 @@
 import torch
 import torch.nn as nn
 from typing import Tuple, Dict
-import common_utils
+import common_utils, sym_utils
+import math
 
+
+class SymLinear(torch.nn.Module):
+    __constants__ = ['n', 'in_sizes', 'in_size', 'out_sizes', 'out_size']
+
+    def __init__(self, n, in_sizes, out_sizes):
+        super().__init__()
+        self.n = n
+        self.in_sizes = in_sizes
+        self.in_size = sizes_to_size(in_sizes)
+        self.out_sizes = out_sizes
+        self.out_size = sizes_to_size(out_sizes)
+
+        self.weight = sym_utils.build_weight(n, in_sizes, out_sizes)
+        self.bias = sym_utils.build_bias(n, out_sizes)
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        assert(len(self.parameters()))
+        stdv = 1.0 / math.sqrt(self.out_size)
+        for weight in self.parameters():
+            init.uniform_(weight, -stdv, stdv)
+
+    def forward(self, input):
+        return sym_utils.linear(self.n, self.in_sizes, self.out_sizes, self.out_size, input, weight, bias)
+
+class SymLSTM(torch.nn.Module):
+    __constants__ = ['n', 'in_sizes', 'in_size', 'hid_sizes', 'hid_size']
+
+    def __init__(self, n, in_sizes, hid_sizes):
+        super().__init__()
+        self.n = n
+        self.in_sizes = in_sizes
+        self.in_size = sizes_to_size(in_sizes)
+        self.hid_sizes = hid_sizes
+        self.hid_size = sizes_to_size(hid_sizes)
+        self.gate_sizes = tuple(d * 4 for d in hid_sizes)
+        self.gate_size = sizes_to_size(self.gate_sizes)
+
+        self.weight_ih = sym_utils.build_weight(n, in_sizes, gate_sizes)
+        self.weight_hh = sym_utils.build_weight(n, hid_sizes, gate_sizes)
+        self.bias_ih = sym_utils.build_bias(n, gate_sizes)
+        self.bias_hh = sym_utils.build_bias(n, gate_sizes)
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        assert(len(self.parameters()))
+        stdv = 1.0 / math.sqrt(self.hid_size)
+        for weight in self.parameters():
+            init.uniform_(weight, -stdv, stdv)
+
+    def forward(self, input, hx = None):
+        if hx is None:
+            h0 = torch.zeros(*input.size()[:-1], hid_size, device=input.device)
+            c0 = torch.zeros_like(h0)
+        else: (h0, c0) = hx
+        gates = sym_utils.linear(self.n, self.in_sizes, self.gate_sizes, self.gate_size, input, weight_ih, bias_ih)
+              + sym_utils.linear(self.n, self.hid_sizes, self.gate_sizes, self.gate_size, h0, weight_hh, bias_hh)
+        dim = gates.dim()
+        h1 = torch.empty_like(h0)
+        c1 = torch.empty_like(c0)
+        st = 0
+        for m in range(self.n):
+            for pi in range(sym_utils.num_perms(n, m+1)):
+                (g, i, f, o) = gates.narrow(dim-1, st * 4, gate_sizes[m]).chunk(4, dim-1)
+                c1_i = c1.narrow(dim-1, st, hid_sizes[m])
+                c1_i.copy_(g.tanh().mul(i.sigmoid()) + c0.narrow(dim-1, st, hid_sizes[m]).mul(f.sigmoid()))
+                h1.narrow(dim-1, st, hid_sizes[m]).copy_(c.tanh().mul(o.sigmoid()))
+        return (h1, c1)
 
 class R2D2Net(torch.jit.ScriptModule):
     __constants__ = ["hid_dim", "out_dim", "num_lstm_layer", "hand_size"]
