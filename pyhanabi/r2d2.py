@@ -13,8 +13,9 @@ import common_utils
 class R2D2Net(torch.jit.ScriptModule):
     __constants__ = ["hid_dim", "out_dim", "num_lstm_layer", "hand_size"]
 
-    def __init__(self, device, in_dim, hid_dim, out_dim, num_lstm_layer, hand_size):
+    def __init__(self, device, symnet, in_dim, hid_dim, out_dim, num_lstm_layer, hand_size):
         super().__init__()
+        self.symnet = symnet
         self.in_dim = in_dim
         self.hid_dim = hid_dim
         self.out_dim = out_dim
@@ -22,19 +23,23 @@ class R2D2Net(torch.jit.ScriptModule):
         self.num_lstm_layer = num_lstm_layer
         self.hand_size = hand_size
 
-        self.net = nn.Sequential(nn.Linear(self.in_dim, self.hid_dim), nn.ReLU())
-        self.lstm = nn.LSTM(
-            self.hid_dim,
-            self.hid_dim,
-            num_layers=self.num_lstm_layer,  # , batch_first=True
-        ).to(device)
-        self.lstm.flatten_parameters()
+        if symnet:
+            pass
 
-        self.fc_v = nn.Linear(self.hid_dim, 1)
-        self.fc_a = nn.Linear(self.hid_dim, self.out_dim)
+        else:
+            self.net = nn.Sequential(nn.Linear(self.in_dim, self.hid_dim), nn.ReLU())
+            self.lstm = nn.LSTM(
+                self.hid_dim,
+                self.hid_dim,
+                num_layers=self.num_lstm_layer,  # , batch_first=True
+            ).to(device)
+            self.lstm.flatten_parameters()
 
-        # for aux task
-        self.pred = nn.Linear(self.hid_dim, self.hand_size * 3)
+            self.fc_v = nn.Linear(self.hid_dim, 1)
+            self.fc_a = nn.Linear(self.hid_dim, self.out_dim)
+
+            # for aux task
+            self.pred = nn.Linear(self.hid_dim, self.hand_size * 3)
 
     @torch.jit.script_method
     def get_h0(self, batchsize: int) -> Dict[str, torch.Tensor]:
@@ -73,13 +78,18 @@ class R2D2Net(torch.jit.ScriptModule):
             action = action.unsqueeze(0)
             one_step = True
 
-        x = self.net(priv_s)
-        if len(hid) == 0:
-            o, (h, c) = self.lstm(x)
+        if self.symnet:
+            pass
+
         else:
-            o, (h, c) = self.lstm(x, (hid["h0"], hid["c0"]))
-        a = self.fc_a(o)
-        v = self.fc_v(o)
+            x = self.net(priv_s)
+            if len(hid) == 0:
+                o, (h, c) = self.lstm(x)
+            else:
+                o, (h, c) = self.lstm(x, (hid["h0"], hid["c0"]))
+            a = self.fc_a(o)
+            v = self.fc_v(o)
+
         q = self._duel(v, a, legal_move)
 
         # q: [seq_len, batch, num_action]
@@ -141,6 +151,7 @@ class R2D2Agent(torch.jit.ScriptModule):
         gamma,
         eta,
         device,
+        symnet,
         in_dim,
         hid_dim,
         out_dim,
@@ -150,10 +161,10 @@ class R2D2Agent(torch.jit.ScriptModule):
     ):
         super().__init__()
         self.online_net = R2D2Net(
-            device, in_dim, hid_dim, out_dim, num_lstm_layer, hand_size
+            device, symnet, in_dim, hid_dim, out_dim, num_lstm_layer, hand_size
         ).to(device)
         self.target_net = R2D2Net(
-            device, in_dim, hid_dim, out_dim, num_lstm_layer, hand_size
+            device, symnet, in_dim, hid_dim, out_dim, num_lstm_layer, hand_size
         ).to(device)
         self.vdn = vdn
         self.multi_step = multi_step
@@ -174,6 +185,7 @@ class R2D2Agent(torch.jit.ScriptModule):
             self.gamma,
             self.eta,
             device,
+            self.online_net.symnet,
             self.online_net.in_dim,
             self.online_net.hid_dim,
             self.online_net.out_dim,

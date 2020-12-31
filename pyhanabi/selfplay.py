@@ -49,6 +49,7 @@ def parse_args():
     parser.add_argument("--grad_clip", type=float, default=50, help="max grad norm")
     parser.add_argument("--num_lstm_layer", type=int, default=2)
     parser.add_argument("--rnn_hid_dim", type=int, default=512)
+    parser.add_argument("--symnet", action='store_const', const=True, default=False)
 
     parser.add_argument("--train_device", type=str, default="cuda:0")
     parser.add_argument("--batchsize", type=int, default=128)
@@ -131,6 +132,7 @@ if __name__ == "__main__":
         args.gamma,
         args.eta,
         args.train_device,
+        args.symnet,
         games[0].feature_size(),
         args.rnn_hid_dim,
         games[0].num_action(),
