@@ -5,9 +5,21 @@
 # LICENSE file in the root directory of this source tree.
 #
 #!/bin/bash
-# my.sh load_model run_id
-python selfplay.py \
-       --save_dir exps/run$2 \
+# ./sym.sh run_id load_model
+
+if [[ -n $1 ]]; then
+	load="--load_model $1"
+else
+	load=
+fi
+if [ -n $2 ]; then
+	name=$2
+else
+	name=sym_run`date "+%d-%H%M"`
+fi
+
+selfplay.py \
+       --save_dir exps/$name \
        --num_thread 10 \
        --num_game_per_thread 80 \
        --method vdn\
@@ -31,4 +43,5 @@ python selfplay.py \
        --rnn_hid_dim 512 \
        --act_device cuda:0 \
        --shuffle_color 0 \
-#       --load_model $1\
+       --symnet\
+       $load\
