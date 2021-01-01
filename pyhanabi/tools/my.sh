@@ -30,5 +30,5 @@ python selfplay.py \
        --num_player 2 \
        --rnn_hid_dim 512 \
        --act_device cuda:0 \
-       --shuffle_color 1 \
-       --load_model $1\
+       --shuffle_color 0 \
+#       --load_model $1\
