@@ -5,11 +5,12 @@
 # LICENSE file in the root directory of this source tree.
 #
 #!/bin/bash
+# my.sh load_model run_id
 python selfplay.py \
-       --save_dir exps/run0 \
-       --method iql \
-       --num_thread 20 \
+       --save_dir exps/run$2 \
+       --num_thread 10 \
        --num_game_per_thread 80 \
+       --method vdn\
        --sad 1 \
        --act_base_eps 0.1 \
        --act_eps_alpha 7 \
@@ -17,7 +18,7 @@ python selfplay.py \
        --eps 1.5e-05 \
        --grad_clip 5 \
        --gamma 0.999 \
-       --seed 1 \
+       --seed 9 \
        --batchsize 128 \
        --burn_in_frames 5000 \
        --replay_buffer_size 131072 \
@@ -28,5 +29,6 @@ python selfplay.py \
        --eval_bomb 0 \
        --num_player 2 \
        --rnn_hid_dim 512 \
-       --act_device cuda:1 \
-       --shuffle_color 1 \
+       --act_device cuda:0 \
+       --shuffle_color 0 \
+#       --load_model $1\

@@ -65,8 +65,7 @@ class SymLSTM(torch.nn.Module):
             h0 = torch.zeros(*input.size()[:-1], hid_size, device=input.device)
             c0 = torch.zeros_like(h0)
         else: (h0, c0) = hx
-        gates = sym_utils.linear(self.n, self.in_sizes, self.gate_sizes, self.gate_size, input, weight_ih, bias_ih)
-              + sym_utils.linear(self.n, self.hid_sizes, self.gate_sizes, self.gate_size, h0, weight_hh, bias_hh)
+        gates = sym_utils.linear(self.n, self.in_sizes, self.gate_sizes, self.gate_size, input, weight_ih, bias_ih) + sym_utils.linear(self.n, self.hid_sizes, self.gate_sizes, self.gate_size, h0, weight_hh, bias_hh)
         dim = gates.dim()
         h1 = torch.empty_like(h0)
         c1 = torch.empty_like(c0)
