@@ -35,7 +35,7 @@ class SymLinear(torch.nn.Module):
     def forward(self, input):
         return sym_utils.linear(self.n, self.in_sizes, self.out_sizes, self.out_size, input, weight, bias)
 
-class SymLSTM(torch.nn.Module):
+class SymLSTMCell(torch.nn.Module):
     __constants__ = ['n', 'in_sizes', 'in_size', 'hid_sizes', 'hid_size']
 
     def __init__(self, n, in_sizes, hid_sizes):
@@ -60,11 +60,11 @@ class SymLSTM(torch.nn.Module):
         for weight in self.parameters():
             init.uniform_(weight, -stdv, stdv)
 
-    def forward(self, input, hx = None):
+    def forward(self, input, hx=None):
         if hx is None:
-            h0 = torch.zeros(*input.size()[:-1], hid_size, device=input.device)
-            c0 = torch.zeros_like(h0)
-        else: (h0, c0) = hx
+            zeros = torch.zeros(*input.size()[:-1], hid_size, device=input.device)
+            h0, c0 = zeros, zeros
+        else: h0, c0 = hx
         gates = sym_utils.linear(self.n, self.in_sizes, self.gate_sizes, self.gate_size, input, weight_ih, bias_ih) + sym_utils.linear(self.n, self.hid_sizes, self.gate_sizes, self.gate_size, h0, weight_hh, bias_hh)
         dim = gates.dim()
         h1 = torch.empty_like(h0)
@@ -79,6 +79,50 @@ class SymLSTM(torch.nn.Module):
                     h1.narrow(dim-1, st, hid_sizes[m]).copy_(c.tanh().mul(o.sigmoid()))
                     st += hid_sizes[m]
         return (h1, c1)
+
+class SymLSTM(torch.nn.Module):
+    __constants__ = ['num_layers']
+
+    def __init__(self, n, in_sizes, hid_sizes, num_layers):
+        self.num_layers = num_layers
+        self.lstm = [SymLSTM(n, self.hid_sizes if i else self.in_size,
+                self.hid_sizes) for i in range(num_layers)]
+
+    def forward(self, input, hx=None):
+        orig_input = input
+        if isinstance(orig_input, torch.nn.utils.rnn.PackedSequence):
+            input, batch_sizes, sorted_indices, unsorted_indices = input
+            max_batch_size = batch_sizes[0]
+            max_batch_size = int(max_batch_size)
+        else:
+            batch_sizes = None
+            max_batch_size = input.size(1)
+            sorted_indices = None
+            unsorted_indices = None
+
+        if hx is None:
+            zeros = torch.zeros(self.num_layers, max_batch_size, self.hid_size, device=input.device)
+            hx = (zeros, zeros)
+        else:
+            hx = self.permute_hid(hx, sorted_indices)
+
+        seq_len = input.size(0)
+        output = torch.empty(seq_len, max_batch_size, self.hid_size)
+        for i in range(seq_len):
+            for t in self.num_layers:
+                hx[0][t], hx[1][t] = self.lstm[t](x, (hx[0][t], hx[1][t]))
+                x = hx[0][t]
+            output[i] = x
+
+        if isinstance(orig_input, PackedSequence):
+            output_packed = PackedSequence(output, batch_sizes, sorted_indices, unsorted_indices)
+            return output_packed, self.permute_hidden(hx, unsorted_indices)
+        else:
+            return output, self.permute_hidden(hx, unsorted_indices)
+
+    def permute_hidden(self, hx: Tuple[Tensor, Tensor], permutation: Optional[Tensor]) -> Tuple[Tensor, Tensor]:
+        if permutation is None: return hx
+        return apply_permutation(hx[0], permutation), apply_permutation(hx[1], permutation)
 
 class R2D2Net(torch.jit.ScriptModule):
     __constants__ = ["hid_dim", "out_dim", "num_lstm_layer", "hand_size"]
@@ -95,7 +139,7 @@ class R2D2Net(torch.jit.ScriptModule):
 
         if symnet:
             self.net = nn.Sequential(SymLinear(5, self.in_dim, self.hid_dim), nn.ReLU())
-            self.lstm = [SymLSTM(5, self.hid_dim, self.hid_dm).to(device) for i in range(num_lstm_layer)]
+            self.lstm = SymLSTM(5, self.hid_dim, self.hid_dim, self.num_lstm_layer).to(device)
             self.fc_v = SymLinear(5, self.hid_dim, (1,0,0,0,0))
             self.fc_a = SymLinear(5, self.hid_dim, self.out_dim)
             self.pred = SymLinear(5, self.hid_dim, (self.hand_size*3, 0,0,0,0))
@@ -155,11 +199,8 @@ class R2D2Net(torch.jit.ScriptModule):
         if self.symnet:
             x = self.net(priv_s)
             if len(hid) == 0: hx = None
-            else: hx = (hid["h0"], hid["c0"])
+            else hx = (hid["h0"], hid["c0"])
             x, hx = self.lstm(x)
-            o = hx[0]
-            a = self.fc_a(o)
-            v = self.fc_v(o)
 
         else:
             x = self.net(priv_s)
