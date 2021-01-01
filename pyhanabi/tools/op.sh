@@ -5,14 +5,14 @@
 # LICENSE file in the root directory of this source tree.
 #
 #!/bin/bash
-# my.sh load_model run_id
+# ./op.sh load_model run_id
 
 if [[ -n $1 ]]; then
 	load="--load_model $1"
 else
 	load=
 fi
-if [ -n $2 ]; then
+if [[ -n $2 ]]; then
 	name=$2
 else
 	name=op_run`date "+%d-%H%M"`
