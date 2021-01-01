@@ -72,11 +72,13 @@ class SymLSTM(torch.nn.Module):
         c1 = torch.empty_like(c0)
         st = 0
         for m in range(self.n):
-            for pi in range(sym_utils.num_perms(n, m+1)):
-                (g, i, f, o) = gates.narrow(dim-1, st * 4, gate_sizes[m]).chunk(4, dim-1)
-                c1_i = c1.narrow(dim-1, st, hid_sizes[m])
-                c1_i.copy_(g.tanh().mul(i.sigmoid()) + c0.narrow(dim-1, st, hid_sizes[m]).mul(f.sigmoid()))
-                h1.narrow(dim-1, st, hid_sizes[m]).copy_(c.tanh().mul(o.sigmoid()))
+            if hid_sizes[m]:
+                for pi in range(sym_utils.num_perms(n, m)):
+                    (g, i, f, o) = gates.narrow(dim-1, st * 4, gate_sizes[m]).chunk(4, dim-1)
+                    c1_i = c1.narrow(dim-1, st, hid_sizes[m])
+                    c1_i.copy_(g.tanh().mul(i.sigmoid()) + c0.narrow(dim-1, st, hid_sizes[m]).mul(f.sigmoid()))
+                    h1.narrow(dim-1, st, hid_sizes[m]).copy_(c.tanh().mul(o.sigmoid()))
+                    st += hid_sizes[m]
         return (h1, c1)
 
 class R2D2Net(torch.jit.ScriptModule):
@@ -93,7 +95,11 @@ class R2D2Net(torch.jit.ScriptModule):
         self.hand_size = hand_size
 
         if symnet:
-            pass
+            self.net = nn.Sequential(SymLinear(5, self.in_dim, self.hid_dim), nn.ReLU())
+            self.lstm = [SymLSTM(5, self.hid_dim, self.hid_dm).to(device) for i in range(num_lstm_layer)]
+            self.fc_v = SymLinear(5, self.hid_dim, (1,0,0,0,0))
+            self.fc_a = SymLinear(5, self.hid_dim, self.out_dim)
+            self.pred = SymLinear(5, self.hid_dim, (self.hand_size*3, 0,0,0,0))
 
         else:
             self.net = nn.Sequential(nn.Linear(self.in_dim, self.hid_dim), nn.ReLU())
@@ -148,7 +154,10 @@ class R2D2Net(torch.jit.ScriptModule):
             one_step = True
 
         if self.symnet:
-            pass
+            x = self.net(priv_s)
+            if len(hid) == 0: hx = None
+            else hx = (hid["h0"], hid["c0"])
+            x, hx = self.lstm(x)
 
         else:
             x = self.net(priv_s)
