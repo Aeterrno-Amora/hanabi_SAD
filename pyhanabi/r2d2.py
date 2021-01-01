@@ -155,8 +155,11 @@ class R2D2Net(torch.jit.ScriptModule):
         if self.symnet:
             x = self.net(priv_s)
             if len(hid) == 0: hx = None
-            else hx = (hid["h0"], hid["c0"])
+            else: hx = (hid["h0"], hid["c0"])
             x, hx = self.lstm(x)
+            o = hx[0]
+            a = self.fc_a(o)
+            v = self.fc_v(o)
 
         else:
             x = self.net(priv_s)
