@@ -120,9 +120,9 @@ class SymLSTM(torch.nn.Module):
         else:
             return output, self.permute_hidden(hx, unsorted_indices)
 
-    def permute_hidden(self, hx: Tuple[Tensor, Tensor], permutation: Optional[Tensor]) -> Tuple[Tensor, Tensor]:
+    def permute_hidden(self, hx, permutation):
         if permutation is None: return hx
-        return apply_permutation(hx[0], permutation), apply_permutation(hx[1], permutation)
+        return hx[0].index_select(1, permutation), hx[1].index_select(1, permutation)
 
 class R2D2Net(torch.jit.ScriptModule):
     __constants__ = ["hid_dim", "out_dim", "num_lstm_layer", "hand_size"]
@@ -196,20 +196,13 @@ class R2D2Net(torch.jit.ScriptModule):
             action = action.unsqueeze(0)
             one_step = True
 
-        if self.symnet:
-            x = self.net(priv_s)
-            if len(hid) == 0: hx = None
-            else hx = (hid["h0"], hid["c0"])
-            x, hx = self.lstm(x)
-
+        x = self.net(priv_s)
+        if len(hid) == 0:
+            o, (h, c) = self.lstm(x)
         else:
-            x = self.net(priv_s)
-            if len(hid) == 0:
-                o, (h, c) = self.lstm(x)
-            else:
-                o, (h, c) = self.lstm(x, (hid["h0"], hid["c0"]))
-            a = self.fc_a(o)
-            v = self.fc_v(o)
+            o, (h, c) = self.lstm(x, (hid["h0"], hid["c0"]))
+        a = self.fc_a(o)
+        v = self.fc_v(o)
 
         q = self._duel(v, a, legal_move)
 

@@ -33,7 +33,7 @@ def evaluate_legacy_model(
                 "evaluating: %s\n\tfor %dx%d games" % (weight_file, num_run, num_game)
             )
 
-        device = "cuda:1"
+        device = "cuda:0"
 
         state_dict = torch.load(weight_file)
         input_dim = state_dict["net.0.weight"].size()[1]
@@ -70,7 +70,7 @@ def evaluate_legacy_model(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("weight", default=None, type=str, required=True)
+    parser.add_argument("weight", default=None, type=str)
     parser.add_argument("--num_player", default=2, type=int)
     parser.add_argument("--sad", action='store_const', const=True, default=False)
     parser.add_argument("--symnet", action='store_const', const=True, default=False)
@@ -81,4 +81,4 @@ if __name__ == "__main__":
     weight_files = [args.weight for _ in range(args.num_player)]
 
     # fast evaluation for 10k games
-    evaluate_legacy_model(weight_files, sad, symnet, 1000, 1, 0, num_run=10)
+    evaluate_legacy_model(weight_files, args.sad, args.symnet, 1000, 1, 0, num_run=10)
