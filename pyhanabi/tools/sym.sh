@@ -18,7 +18,7 @@ else
 	name=sym_run`date "+%d-%H%M"`
 fi
 
-selfplay.py \
+python selfplay.py \
        --save_dir exps/$name \
        --num_thread 10 \
        --num_game_per_thread 80 \
@@ -40,8 +40,8 @@ selfplay.py \
        --train_bomb 0 \
        --eval_bomb 0 \
        --num_player 2 \
-       --rnn_hid_dim 512 \
+       --symnet\
+       --rnn_hid_dim 128 32 4 3 \
        --act_device cuda:0 \
        --shuffle_color 0 \
-       --symnet\
        $load\
