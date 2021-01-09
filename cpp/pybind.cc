@@ -22,8 +22,8 @@ PYBIND11_MODULE(hanalearn, m) {
            bool,  // shuffleObs
            bool,  // shuffleColor
            bool>())
-      .def("feature_size", &HanabiEnv::featureSize)
-      .def("num_action", &HanabiEnv::numAction)
+      .def("feature_sizes", &HanabiEnv::featureSizes)
+      .def("action_sizes", &HanabiEnv::actionSizes)
       .def("reset", &HanabiEnv::reset)
       .def("step", &HanabiEnv::step)
       .def("terminated", &HanabiEnv::terminated)

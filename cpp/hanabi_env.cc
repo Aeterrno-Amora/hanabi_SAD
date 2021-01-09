@@ -57,14 +57,17 @@ std::tuple<rela::TensorDict, float, bool> HanabiEnv::step(
   // perform action for only current player
   int curPlayer = state_->CurPlayer();
   int actionUid = action.at("a")[curPlayer].item<int>();
+  if (color_major_) {
+      actionUid -= 1;
+  }
   hle::HanabiMove move = game_.GetMove(actionUid);
   maybeInversePermuteColor_(move, curPlayer);
 
   if (!state_->MoveIsLegal(move)) {
     std::cout << "Error: move is not legal" << std::endl;
     std::cout << "UID: " << actionUid << std::endl;
-    std::cout << "legal move:" << std::endl;
     std::cout << "numStep: " << numStep_ - 1 << std::endl;
+    std::cout << "legal_move:";
 
     auto legalMoves = state_->LegalMoves(curPlayer);
     for (auto move : legalMoves) {
@@ -74,8 +77,11 @@ std::tuple<rela::TensorDict, float, bool> HanabiEnv::step(
         move.SetColor(permColor);
       }
       auto uid = game_.GetMoveUid(move);
-      std::cout << "legal_move: " << uid << std::endl;
+      std::cout << " " << uid;
+      assert(state_->MoveIsLegal(move));
+      assert(state_->MoveIsLegal(game_.GetMove(uid)));
     }
+    std::cout << std::endl;
     assert(false);
   }
 
@@ -83,6 +89,9 @@ std::tuple<rela::TensorDict, float, bool> HanabiEnv::step(
   if (sad_) {
     cloneState = std::make_unique<hle::HanabiState>(*state_);
     int greedyActionUid = action.at("greedy_a")[curPlayer].item<int>();
+    if (color_major_) {
+    	greedyActionUid -= 1;
+    }
     hle::HanabiMove greedyMove = game_.GetMove(greedyActionUid);
     maybeInversePermuteColor_(greedyMove, curPlayer);
 
@@ -186,7 +195,17 @@ rela::TensorDict HanabiEnv::computeFeatureAndLegalMove(
         int permColor = colorPermutes_[i][move.Color()];
         move.SetColor(permColor);
       }
-      auto uid = game_.GetMoveUid(move) + 1;
+      auto uid = game_.GetMoveUid(move);
+      assert(uid != -1);
+      if (color_major_) {
+      	uid += 1;
+      }
+      //assert(uid != noOpUid());
+      if (uid == noOpUid()) {
+      	  std::cout << "uid = " << uid << std::endl;
+      	  std::cout << "nop = " << noOpUid() << std::endl;
+      	  assert(false);
+      }
       moveUids[uid] = 1;
     }
     if (legalMoves.size() == 0) {

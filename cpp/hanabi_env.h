@@ -52,32 +52,36 @@ class HanabiEnv : public rela::Env {
   virtual ~HanabiEnv() {
   }
 
-  std::vector<int> featureSize() const {
-	if (color_major_) {
-		int uni_len = hle::TotalUniLength(game_);
-		int sym_len = hle::TotalSymLength(game_);
-		if (sad_) {
-			uni_len += hle::LastActionSectionUniLength(game_);
-			sym_len += hle::LastActionSectionSymLength(game_);
-		}
-		return {uni_len, sym_len};
-	} else {
-		int size = obsEncoder_.Shape()[0];
-		if (sad_) {
-			size += hle::LastActionSectionLength(game_);
-		}
-		return {size};
-	}
+  std::vector<int> featureSizes() const {
+    if (color_major_) {
+      int uni_len = hle::TotalUniLength(game_);
+      int sym_len = hle::TotalSymLength(game_);
+      if (sad_) {
+        uni_len += hle::LastActionSectionUniLength(game_);
+        sym_len += hle::LastActionSectionSymLength(game_);
+      }
+      return {uni_len, sym_len};
+    } else {
+      int size = obsEncoder_.Shape()[0];
+      if (sad_) {
+        size += hle::LastActionSectionLength(game_);
+      }
+      return {size};
+    }
   }
 
-  std::vector<int> numAction() const {
-	int num_actions = 1 + game_.MaxMoves();
-	int num_players = game_.NumPlayers();
-	if (color_major_) {
-		return {num_actions - game_.NumColors() * num_players, num_players};
-	} else {
-		return {num_actions};
-	}
+  int numAction() const {
+      return game_.MaxMoves() + 1;
+  }
+
+  std::vector<int> actionSizes() const {
+    int num_action = numAction();
+    int num_players = game_.NumPlayers();
+    if (color_major_) {
+      return {num_action - game_.NumColors() * (num_players - 1), num_players - 1};
+    } else {
+      return {num_action};
+    }
   }
 
   int noOpUid() const {

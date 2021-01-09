@@ -128,6 +128,9 @@ if __name__ == "__main__":
         args.shuffle_color,
     )
 
+    print("in_sizes:", games[0].feature_sizes())
+    print("out_sizes:", games[0].action_sizes())
+
     agent = r2d2.R2D2Agent(
         (args.method == "vdn"),
         args.multi_step,
@@ -135,9 +138,9 @@ if __name__ == "__main__":
         args.eta,
         args.train_device,
         args.symnet,
-        games[0].feature_size(),
+        games[0].feature_sizes(),
         args.rnn_hid_dim,
-        games[0].num_action(),
+        games[0].action_sizes(),
         args.num_lstm_layer,
         args.hand_size,
         False,  # uniform priority

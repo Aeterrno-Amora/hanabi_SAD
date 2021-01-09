@@ -11,86 +11,97 @@ import common_utils, sym_utils
 import math
 
 
-class SymLinear(torch.nn.Module):
+class SymLinear(nn.Module):
     __constants__ = ['n', 'in_sizes', 'in_size', 'out_sizes', 'out_size']
 
-    def __init__(self, n, in_sizes, out_sizes):
+    def __init__(self, n : int, in_sizes, out_sizes):
         super().__init__()
         self.n = n
         self.in_sizes = in_sizes
-        self.in_size = sizes_to_size(in_sizes)
+        self.in_size = sym_utils.sizes_to_size(self.n, self.in_sizes)
         self.out_sizes = out_sizes
-        self.out_size = sizes_to_size(out_sizes)
+        self.out_size = sym_utils.sizes_to_size(self.n, self.out_sizes)
 
-        self.weight = sym_utils.build_weight(n, in_sizes, out_sizes)
-        self.bias = sym_utils.build_bias(n, out_sizes)
+        self.weight = sym_utils.build_weight(self, "weight", self.n, self.in_sizes, self.out_sizes)
+        self.bias = nn.Parameter(torch.empty(self.out_size))
         self.reset_parameters()
 
     def reset_parameters(self):
-        assert(len(self.parameters()))
+        assert(len(list(self.parameters())))
         stdv = 1.0 / math.sqrt(self.out_size)
         for weight in self.parameters():
-            init.uniform_(weight, -stdv, stdv)
+            nn.init.uniform_(weight, -stdv, stdv)
 
     def forward(self, input):
-        return sym_utils.linear(self.n, self.in_sizes, self.out_sizes, self.out_size, input, weight, bias)
+        return sym_utils.linear(self.n, self.in_sizes, self.out_sizes, self.out_size, input, self.weight, self.bias)
 
-class SymLSTMCell(torch.nn.Module):
+class SymLSTMCell(nn.Module):
     __constants__ = ['n', 'in_sizes', 'in_size', 'hid_sizes', 'hid_size']
 
     def __init__(self, n, in_sizes, hid_sizes):
         super().__init__()
         self.n = n
         self.in_sizes = in_sizes
-        self.in_size = sizes_to_size(in_sizes)
+        self.in_size = sym_utils.sizes_to_size(self.n, self.in_sizes)
         self.hid_sizes = hid_sizes
-        self.hid_size = sizes_to_size(hid_sizes)
+        self.hid_size = sym_utils.sizes_to_size(self.n, self.hid_sizes)
         self.gate_sizes = tuple(d * 4 for d in hid_sizes)
-        self.gate_size = sizes_to_size(self.gate_sizes)
+        self.gate_size = sym_utils.sizes_to_size(self.n, self.gate_sizes)
 
-        self.weight_ih = sym_utils.build_weight(n, in_sizes, gate_sizes)
-        self.weight_hh = sym_utils.build_weight(n, hid_sizes, gate_sizes)
-        self.bias_ih = sym_utils.build_bias(n, gate_sizes)
-        self.bias_hh = sym_utils.build_bias(n, gate_sizes)
+        self.weight_ih = sym_utils.build_weight(self, "weight_ih", self.n, self.in_sizes, self.gate_sizes)
+        self.weight_hh = sym_utils.build_weight(self, "weight_hh", self.n, self.hid_sizes, self.gate_sizes)
+        self.bias_ih = nn.Parameter(torch.empty(self.gate_size))
+        self.bias_hh = nn.Parameter(torch.empty(self.gate_size))
         self.reset_parameters()
 
     def reset_parameters(self):
-        assert(len(self.parameters()))
+        assert(len(list(self.parameters())))
         stdv = 1.0 / math.sqrt(self.hid_size)
         for weight in self.parameters():
-            init.uniform_(weight, -stdv, stdv)
+            nn.init.uniform_(weight, -stdv, stdv)
 
     def forward(self, input, hx=None):
         if hx is None:
-            zeros = torch.zeros(*input.size()[:-1], hid_size, device=input.device)
+            zeros = torch.zeros(*input.size()[:-1], self.hid_size, device=input.device)
             h0, c0 = zeros, zeros
         else: h0, c0 = hx
-        gates = sym_utils.linear(self.n, self.in_sizes, self.gate_sizes, self.gate_size, input, weight_ih, bias_ih) + sym_utils.linear(self.n, self.hid_sizes, self.gate_sizes, self.gate_size, h0, weight_hh, bias_hh)
+        gates = sym_utils.linear(self.n, self.in_sizes, self.gate_sizes, self.gate_size, input, self.weight_ih, self.bias_ih) + sym_utils.linear(self.n, self.hid_sizes, self.gate_sizes, self.gate_size, h0, self.weight_hh, self.bias_hh)
         dim = gates.dim()
         h1 = torch.empty_like(h0)
         c1 = torch.empty_like(c0)
         st = 0
-        for m in range(len(hid_sizes)):
-            if hid_sizes[m]:
+        for m in range(len(self.hid_sizes)):
+            if self.hid_sizes[m]:
                 for pi in range(sym_utils.num_perms(n, m)):
                     (g, i, f, o) = gates.narrow(dim-1, st * 4, gate_sizes[m]).chunk(4, dim-1)
-                    c1_i = c1.narrow(dim-1, st, hid_sizes[m])
-                    c1_i.copy_(g.tanh().mul(i.sigmoid()) + c0.narrow(dim-1, st, hid_sizes[m]).mul(f.sigmoid()))
-                    h1.narrow(dim-1, st, hid_sizes[m]).copy_(c.tanh().mul(o.sigmoid()))
-                    st += hid_sizes[m]
+                    c1_i = c1.narrow(dim-1, st, self.hid_sizes[m])
+                    c1_i.copy_(g.tanh().mul(i.sigmoid()) + c0.narrow(dim-1, st, self.hid_sizes[m]).mul(f.sigmoid()))
+                    h1.narrow(dim-1, st, self.hid_sizes[m]).copy_(c.tanh().mul(o.sigmoid()))
+                    st += self.hid_sizes[m]
         return (h1, c1)
 
-class SymLSTM(torch.nn.Module):
-    __constants__ = ['num_layers']
+class SymLSTM(nn.Module):
+    __constants__ = ['num_layers', 'n', 'in_sizes', 'in_size', 'hid_sizes', 'hid_size']
 
     def __init__(self, n, in_sizes, hid_sizes, num_layers):
+        super().__init__()
+        self.n = n
+        self.in_sizes = in_sizes
+        self.in_size = sym_utils.sizes_to_size(self.n, self.in_sizes)
+        self.hid_sizes = hid_sizes
+        self.hid_size = sym_utils.sizes_to_size(self.n, self.hid_sizes)
         self.num_layers = num_layers
-        self.lstm = [SymLSTMCell(n, self.hid_sizes if i else self.in_size,
-                    self.hid_sizes) for i in range(num_layers)]
+
+        self.lstm = []
+        for i in range(self.num_layers):
+            cell = SymLSTMCell(self.n, self.hid_sizes if i else self.in_sizes, self.hid_sizes)
+            self.add_module("lstm_%d" % i, cell)
+            self.lstm.append(cell)
+        assert(len(list(self.parameters())))
 
     def forward(self, input, hx=None):
         orig_input = input
-        if isinstance(orig_input, torch.nn.utils.rnn.PackedSequence):
+        if isinstance(orig_input, nn.utils.rnn.PackedSequence):
             input, batch_sizes, sorted_indices, unsorted_indices = input
             max_batch_size = batch_sizes[0]
             max_batch_size = int(max_batch_size)
@@ -128,24 +139,25 @@ class R2D2Net(torch.jit.ScriptModule):
     __constants__ = ["hid_dim", "out_dim", "num_lstm_layer", "hand_size"]
 
     def __init__(self, device, symnet, in_size, hid_size, out_size, num_lstm_layer, hand_size):
+        print("R2D2Net(",device, symnet, in_size, hid_size, out_size, num_lstm_layer, hand_size,")")
         super().__init__()
         self.symnet = symnet
+        self.in_sizes = tuple(in_size)
+        self.hid_sizes = tuple(hid_size)
+        self.out_sizes = tuple(out_size)
         self.num_ff_layer = 1
         self.num_lstm_layer = num_lstm_layer
         self.hand_size = hand_size
 
         if symnet:
-            self.in_sizes = tuple(in_size)
-            self.hid_sizes = tuple(hid_size)
-            self.out_sizes = tuple(out_size)
-            self.in_dim = sym_utils.sizes_to_size(self.in_sizes)
-            self.hid_dim = sym_utils.sizes_to_size(self.hid_sizes)
-            self.out_dim = sym_utils.sizes_to_size(self.out_sizes)
+            self.in_dim = sym_utils.sizes_to_size(5, self.in_sizes)
+            self.hid_dim = sym_utils.sizes_to_size(5, self.hid_sizes)
+            self.out_dim = sym_utils.sizes_to_size(5, self.out_sizes)
             self.net = nn.Sequential(SymLinear(5, self.in_sizes, self.hid_sizes), nn.ReLU())
             self.lstm = SymLSTM(5, self.hid_sizes, self.hid_sizes, self.num_lstm_layer).to(device)
-            self.fc_v = SymLinear(5, self.hid_sizes, (1))
+            self.fc_v = SymLinear(5, self.hid_sizes, (1,))
             self.fc_a = SymLinear(5, self.hid_sizes, self.out_sizes)
-            self.pred = SymLinear(5, self.hid_sizes, (self.hand_size*3))
+            self.pred = SymLinear(5, self.hid_sizes, (self.hand_size*3,))
 
         else:
             self.in_dim = in_size[0]
@@ -306,9 +318,9 @@ class R2D2Agent(torch.jit.ScriptModule):
             self.eta,
             device,
             self.online_net.symnet,
-            self.online_net.in_dim,
-            self.online_net.hid_dim,
-            self.online_net.out_dim,
+            self.online_net.in_sizes,
+            self.online_net.hid_sizes,
+            self.online_net.out_sizes,
             self.online_net.num_lstm_layer,
             self.online_net.hand_size,
             self.uniform_priority
