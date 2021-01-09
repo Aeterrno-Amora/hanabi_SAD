@@ -176,7 +176,7 @@ rela::TensorDict HanabiEnv::computeFeatureAndLegalMove(
 
     // legal moves
     auto legalMoves = state_->LegalMoves(i);
-    std::vector<float> moveUids(numAction(), 0);
+    std::vector<float> moveUids(1 + game_.MaxMoves(), 0);
     // auto moveUids = torch::zeros({numAction()});
     // auto moveAccessor = moveUids.accessor<float, 1>();
     for (auto move : legalMoves) {

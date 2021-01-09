@@ -54,15 +54,15 @@ class HanabiEnv : public rela::Env {
 
   std::vector<int> featureSize() const {
 	if (color_major_) {
-		uni_len = hle::TotalUniLength(game_);
-		sym_len = hle::TotalSymLength(game_);
+		int uni_len = hle::TotalUniLength(game_);
+		int sym_len = hle::TotalSymLength(game_);
 		if (sad_) {
-			uni_len += hle::LastActionSectionUniLength(game_)
-			sym_len += hle::LastActionSectionSymLength(game_)
+			uni_len += hle::LastActionSectionUniLength(game_);
+			sym_len += hle::LastActionSectionSymLength(game_);
 		}
 		return {uni_len, sym_len};
 	} else {
-		auto shape = obsEncoder_.Shape()[0];
+		int size = obsEncoder_.Shape()[0];
 		if (sad_) {
 			size += hle::LastActionSectionLength(game_);
 		}
@@ -71,12 +71,12 @@ class HanabiEnv : public rela::Env {
   }
 
   std::vector<int> numAction() const {
-	int num_action = 1 + game_.MaxMoves()
-	int num_player = game_.NumPlayers();
+	int num_actions = 1 + game_.MaxMoves();
+	int num_players = game_.NumPlayers();
 	if (color_major_) {
-		return {num_action - game_.NumColors() * num_player, num_player};
+		return {num_actions - game_.NumColors() * num_players, num_players};
 	} else {
-		return {num_action};
+		return {num_actions};
 	}
   }
 
@@ -170,6 +170,7 @@ class HanabiEnv : public rela::Env {
   std::unique_ptr<hle::HanabiState> state_;
   const std::vector<float> epsList_;
   const int maxLen_;
+  const bool color_major_;
   const bool sad_;
   const bool shuffleObs_;
   const bool shuffleColor_;

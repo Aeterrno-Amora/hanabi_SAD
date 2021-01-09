@@ -17,6 +17,7 @@ PYBIND11_MODULE(hanalearn, m) {
            const std::unordered_map<std::string, std::string>&,
            const std::vector<float>&,
            int,   // maxLen
+           bool,  // color_major
            bool,  // sad
            bool,  // shuffleObs
            bool,  // shuffleColor
