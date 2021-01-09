@@ -48,8 +48,9 @@ def parse_args():
     parser.add_argument("--eps", type=float, default=1.5e-4, help="Adam epsilon")
     parser.add_argument("--grad_clip", type=float, default=50, help="max grad norm")
     parser.add_argument("--num_lstm_layer", type=int, default=2)
-    parser.add_argument("--rnn_hid_dim", type=int, default=512)
+    parser.add_argument("--rnn_hid_dim", nargs='+', type=int, default=512)
     parser.add_argument("--symnet", action='store_const', const=True, default=False)
+    parser.add_argument("--color_major", action='store_const', const=True, default=False)
 
     parser.add_argument("--train_device", type=str, default="cuda:0")
     parser.add_argument("--batchsize", type=int, default=128)
@@ -121,6 +122,7 @@ if __name__ == "__main__":
         args.train_bomb,
         explore_eps,
         args.max_len,
+        args.symnet or args.color_major,
         args.sad,
         args.shuffle_obs,
         args.shuffle_color,

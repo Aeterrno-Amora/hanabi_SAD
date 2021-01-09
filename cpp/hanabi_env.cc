@@ -146,6 +146,7 @@ rela::TensorDict HanabiEnv::computeFeatureAndLegalMove(
         obs,
         false,
         shuffleOrder,
+		color_major_,
         shuffleColor_,
         colorPermutes_[i],
         invColorPermutes_[i],
@@ -155,8 +156,14 @@ rela::TensorDict HanabiEnv::computeFeatureAndLegalMove(
       assert(cloneState != nullptr);
       auto extraObs = hle::HanabiObservation(*cloneState, i, false);
       std::vector<float> vGreedyAction = obsEncoder_.EncodeLastAction(
-          extraObs, shuffleOrder, shuffleColor_, colorPermutes_[i]);
-      vS.insert(vS.end(), vGreedyAction.begin(), vGreedyAction.end());
+          extraObs, shuffleOrder, color_major_, shuffleColor_, colorPermutes_[i]);
+	  if (color_major_) {
+		  vS = hle::CombineColorEncodes(game_, vS, vGreedyAction,
+				  hle::TotalUniLength(game_), hle::TotalSymLength(game_),
+				  hle::LastActionSectionUniLength(game_), hle::LastActionSectionSymLength(game_));
+	  } else {
+		  vS.insert(vS.end(), vGreedyAction.begin(), vGreedyAction.end());
+	  }
     }
 
     privS.push_back(torch::tensor(vS));
@@ -179,11 +186,7 @@ rela::TensorDict HanabiEnv::computeFeatureAndLegalMove(
         int permColor = colorPermutes_[i][move.Color()];
         move.SetColor(permColor);
       }
-      auto uid = game_.GetMoveUid(move);
-      if (uid >= noOpUid()) {
-        std::cout << "Error: legal move id should be < " << numAction() - 1 << std::endl;
-        assert(false);
-      }
+      auto uid = game_.GetMoveUid(move) + 1;
       moveUids[uid] = 1;
     }
     if (legalMoves.size() == 0) {

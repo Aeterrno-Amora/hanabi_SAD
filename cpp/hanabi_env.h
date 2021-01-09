@@ -20,6 +20,7 @@ class HanabiEnv : public rela::Env {
       const std::unordered_map<std::string, std::string>& gameParams,
       const std::vector<float>& epsList,
       int maxLen,
+	  bool color_major,
       bool sad,
       bool shuffleObs,
       bool shuffleColor,
@@ -29,6 +30,7 @@ class HanabiEnv : public rela::Env {
       , state_(nullptr)
       , epsList_(epsList)
       , maxLen_(maxLen)
+      , color_major_(color_major)
       , sad_(sad)
       , shuffleObs_(shuffleObs)
       , shuffleColor_(shuffleColor)
@@ -50,21 +52,36 @@ class HanabiEnv : public rela::Env {
   virtual ~HanabiEnv() {
   }
 
-  int featureSize() const {
-    int size = obsEncoder_.Shape()[0];
-    if (sad_) {
-      size += hle::LastActionSectionLength(game_);
-    }
-
-    return size;
+  std::vector<int> featureSize() const {
+	if (color_major_) {
+		uni_len = hle::TotalUniLength(game_);
+		sym_len = hle::TotalSymLength(game_);
+		if (sad_) {
+			uni_len += hle::LastActionSectionUniLength(game_)
+			sym_len += hle::LastActionSectionSymLength(game_)
+		}
+		return {uni_len, sym_len};
+	} else {
+		auto shape = obsEncoder_.Shape()[0];
+		if (sad_) {
+			size += hle::LastActionSectionLength(game_);
+		}
+		return {size};
+	}
   }
 
-  int numAction() const {
-    return game_.MaxMoves() + 1;
+  std::vector<int> numAction() const {
+	int num_action = 1 + game_.MaxMoves()
+	int num_player = game_.NumPlayers();
+	if (color_major_) {
+		return {num_action - game_.NumColors() * num_player, num_player};
+	} else {
+		return {num_action};
+	}
   }
 
   int noOpUid() const {
-    return numAction() - 1;
+    return 0;
   }
 
   int handFeatureSize() const {

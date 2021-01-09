@@ -70,7 +70,7 @@ class SymLSTMCell(torch.nn.Module):
         h1 = torch.empty_like(h0)
         c1 = torch.empty_like(c0)
         st = 0
-        for m in range(self.n):
+        for m in range(len(hid_sizes)):
             if hid_sizes[m]:
                 for pi in range(sym_utils.num_perms(n, m)):
                     (g, i, f, o) = gates.narrow(dim-1, st * 4, gate_sizes[m]).chunk(4, dim-1)
@@ -85,8 +85,8 @@ class SymLSTM(torch.nn.Module):
 
     def __init__(self, n, in_sizes, hid_sizes, num_layers):
         self.num_layers = num_layers
-        self.lstm = [SymLSTM(n, self.hid_sizes if i else self.in_size,
-                self.hid_sizes) for i in range(num_layers)]
+        self.lstm = [SymLSTMCell(n, self.hid_sizes if i else self.in_size,
+                    self.hid_sizes) for i in range(num_layers)]
 
     def forward(self, input, hx=None):
         orig_input = input
@@ -127,24 +127,30 @@ class SymLSTM(torch.nn.Module):
 class R2D2Net(torch.jit.ScriptModule):
     __constants__ = ["hid_dim", "out_dim", "num_lstm_layer", "hand_size"]
 
-    def __init__(self, device, symnet, in_dim, hid_dim, out_dim, num_lstm_layer, hand_size):
+    def __init__(self, device, symnet, in_size, hid_size, out_size, num_lstm_layer, hand_size):
         super().__init__()
         self.symnet = symnet
-        self.in_dim = in_dim
-        self.hid_dim = hid_dim
-        self.out_dim = out_dim
         self.num_ff_layer = 1
         self.num_lstm_layer = num_lstm_layer
         self.hand_size = hand_size
 
         if symnet:
-            self.net = nn.Sequential(SymLinear(5, self.in_dim, self.hid_dim), nn.ReLU())
-            self.lstm = SymLSTM(5, self.hid_dim, self.hid_dim, self.num_lstm_layer).to(device)
-            self.fc_v = SymLinear(5, self.hid_dim, (1,0,0,0,0))
-            self.fc_a = SymLinear(5, self.hid_dim, self.out_dim)
-            self.pred = SymLinear(5, self.hid_dim, (self.hand_size*3, 0,0,0,0))
+            self.in_sizes = tuple(in_size)
+            self.hid_sizes = tuple(hid_size)
+            self.out_sizes = tuple(out_size)
+            self.in_dim = sym_utils.sizes_to_size(self.in_sizes)
+            self.hid_dim = sym_utils.sizes_to_size(self.hid_sizes)
+            self.out_dim = sym_utils.sizes_to_size(self.out_sizes)
+            self.net = nn.Sequential(SymLinear(5, self.in_sizes, self.hid_sizes), nn.ReLU())
+            self.lstm = SymLSTM(5, self.hid_sizes, self.hid_sizes, self.num_lstm_layer).to(device)
+            self.fc_v = SymLinear(5, self.hid_sizes, (1))
+            self.fc_a = SymLinear(5, self.hid_sizes, self.out_sizes)
+            self.pred = SymLinear(5, self.hid_sizes, (self.hand_size*3))
 
         else:
+            self.in_dim = in_size[0]
+            self.hid_dim = hid_size[0]
+            self.out_dim = out_size[0]
             self.net = nn.Sequential(nn.Linear(self.in_dim, self.hid_dim), nn.ReLU())
             self.lstm = nn.LSTM(
                 self.hid_dim,
