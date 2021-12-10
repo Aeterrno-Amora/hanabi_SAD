@@ -72,11 +72,11 @@ class SymLSTMCell(nn.Module):
         st = 0
         for m in range(len(self.hid_sizes)):
             if self.hid_sizes[m]:
-                for pi in range(sym_utils.num_perms(n, m)):
-                    (g, i, f, o) = gates.narrow(dim-1, st * 4, gate_sizes[m]).chunk(4, dim-1)
+                for pi in range(sym_utils.num_perms(self.n, m)):
+                    (g, i, f, o) = gates.narrow(dim-1, st * 4, self.gate_sizes[m]).chunk(4, dim-1)
                     c1_i = c1.narrow(dim-1, st, self.hid_sizes[m])
                     c1_i.copy_(g.tanh().mul(i.sigmoid()) + c0.narrow(dim-1, st, self.hid_sizes[m]).mul(f.sigmoid()))
-                    h1.narrow(dim-1, st, self.hid_sizes[m]).copy_(c.tanh().mul(o.sigmoid()))
+                    h1.narrow(dim-1, st, self.hid_sizes[m]).copy_(c1_i.tanh().mul(o.sigmoid()))
                     st += self.hid_sizes[m]
         return (h1, c1)
 
@@ -100,16 +100,13 @@ class SymLSTM(nn.Module):
         assert(len(list(self.parameters())))
 
     def forward(self, input, hx=None):
-        orig_input = input
-        if isinstance(orig_input, nn.utils.rnn.PackedSequence):
+        ispacked = isinstance(input, nn.utils.rnn.PackedSequence)
+        if ispacked:
             input, batch_sizes, sorted_indices, unsorted_indices = input
-            max_batch_size = batch_sizes[0]
-            max_batch_size = int(max_batch_size)
+            max_batch_size = int(batch_sizes[0])
         else:
-            batch_sizes = None
+            batch_sizes, sorted_indices, unsorted_indices = None, None, None
             max_batch_size = input.size(1)
-            sorted_indices = None
-            unsorted_indices = None
 
         if hx is None:
             zeros = torch.zeros(self.num_layers, max_batch_size, self.hid_size, device=input.device)
@@ -125,11 +122,9 @@ class SymLSTM(nn.Module):
                 x = hx[0][t]
             output[i] = x
 
-        if isinstance(orig_input, PackedSequence):
-            output_packed = PackedSequence(output, batch_sizes, sorted_indices, unsorted_indices)
-            return output_packed, self.permute_hidden(hx, unsorted_indices)
-        else:
-            return output, self.permute_hidden(hx, unsorted_indices)
+        if ispacked:
+            output = nn.utils.rnn.PackedSequence(output, batch_sizes, sorted_indices, unsorted_indices)
+        return output, self.permute_hidden(hx, unsorted_indices)
 
     def permute_hidden(self, hx, permutation):
         if permutation is None: return hx
@@ -187,7 +182,7 @@ class R2D2Net(torch.jit.ScriptModule):
     def act(
         self, priv_s: torch.Tensor, hid: Dict[str, torch.Tensor]
     ) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
-        assert priv_s.dim() == 2, "dim should be 2, [batch, dim], get %d" % s.dim()
+        assert priv_s.dim() == 2, "dim should be 2, [batch, dim], get %d" % priv_s.dim()
 
         priv_s = priv_s.unsqueeze(0)
         x = self.net(priv_s)
